@@ -1,0 +1,132 @@
+---
+title: "Using Censors to Determine Quality of Fitness Activities"
+author: "khendrat"
+date: "January 2, 2018"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+#EXECUTIVE SUMMARY
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit, it is now possible to collect data about personal activity. Research on activity recognition has traditionally focused on discriminating between different activities (i.e., to predict "which" activity was performed at a specific point in time). The quality of executing an activity, the "how (well)", has only received little attention so far.
+
+In this analysis, we use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants collected by [a team of researchers from Lancaster University, Pontifical Catholic University of Rio de Janeiro, and Max Planck Institute for Informatics](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har) to predict how well the participants did the exercise.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, warning = FALSE, message = FALSE)
+```
+
+#SETUP AND DATA LOAD
+
+```{r dataLoad}
+library(caret)
+
+set.seed(1)
+
+trainDFRaw <- read.csv("pml-training.csv", stringsAsFactors = F)
+testDFRaw <- read.csv("pml-testing.csv", stringsAsFactors = F)
+
+fitControl <- trainControl(method = "cv", number = 5)
+```
+
+#MODELS BUILT
+
+##Notes About the Data and Models to Build
+* __We will build models that include summary data and ones that exclude summary data.__ - According to the data's codebook, the data set includes summary statistics. These correspond with variable names prefixed with "kurtosis_", "skewness_", "max_", "min_", "amplitude_", "var_", "avg_", and "stddev_", and contain many NAs and/or "#DIV/0!" values.
+
+```{r dataSeparation}
+trainDFNoSummary <- trainDFRaw[, -grep("kurtosis_|skewness_|max_|min_|amplitude_|var_|avg_|stddev_", colnames(trainDFRaw), value = F)]
+
+trainDFSummary <- trainDFRaw[complete.cases(trainDFRaw), c(2, 8, 160, grep("kurtosis_|skewness_|max_|min_|amplitude_|var_|avg_|stddev_|gyros_|accel_|magnet_", colnames(trainDFRaw), value = F))]
+```
+
+* __We will primarily build tree, random forest, and boosting models.__ - These models are most appropriate for prediction that focuses on classification.
+* __We will also build Linear Discriminant Analysis and Naive Bayes models for exploration.__
+
+##Data Set Preparation
+
+We clean up the data set with summary that has many NAs and/or "#DIV/0!". We also remove variables with near zero variances.
+
+```{r preparation}
+nzv <- nearZeroVar(trainDFSummary, saveMetrics = T)
+trainDFSummary <- trainDFSummary[, -grep(paste(rownames(nzv[nzv$nzv == T, ]), collapse = "|"), colnames(trainDFSummary), value = F)]
+
+trainDFSummary[trainDFSummary == "#DIV/0!"] <- NA
+trainDFSummary <- trainDFSummary[complete.cases(trainDFSummary), ]
+write.csv(trainDFSummary, file = "trainDFSummary.csv")
+trainDFSummary <- read.csv("trainDFSummary.csv")
+
+nzv <- nearZeroVar(trainDFSummary, saveMetrics = T)
+trainDFSummary <- trainDFSummary[, -grep(paste(rownames(nzv[nzv$nzv == T, ]), collapse = "|"), colnames(trainDFSummary), value = F)]
+
+nzv <- nearZeroVar(trainDFNoSummary, saveMetrics = T)
+trainDFNoSummary <- trainDFNoSummary[, -grep(paste(rownames(nzv[nzv$nzv == T, ]), collapse = "|"), colnames(trainDFNoSummary), value = F)]
+```
+
+##Cross Validation
+We use K-folds cross validation with K = 5 to pick the best model.
+
+##Preprocess
+We preprocess the data set using Principal Components Analysis to minimize 
+
+##Models for Data with No Summary
+```{r modelsWithNoSummary}
+preProc <- preProcess(trainDFSummary[, -c(1, 2)], method = "pca", pcaComp = 4)
+predPCA <- predict(preProc, trainDFSummary)
+
+modelFitSummaryRF4 <- train(classe ~ ., method = "rf", data = predPCA, trControl = fitControl)
+modelFitSummaryRF4$results
+modelFitSummaryGBM4 <- train(classe ~ ., method = "gbm", data = predPCA, trControl = fitControl, verbose = F)
+modelFitSummaryGBM4$results
+modelFitSummaryLDA4 <- train(classe ~ ., method = "lda", data = predPCA, trControl = fitControl)
+modelFitSummaryLDA4$results
+modelFitSummaryNB4 <- train(classe ~ ., method = "nb", data = predPCA, trControl = fitControl)
+modelFitSummaryNB4$results
+
+preProc <- preProcess(trainDFSummary[, -c(1, 2)], method = "pca", pcaComp = 5)
+predPCA <- predict(preProc, trainDFSummary)
+
+modelFitSummaryRF5 <- train(classe ~ ., method = "rf", data = predPCA, trControl = fitControl)
+modelFitSummaryRF5$results
+modelFitSummaryGBM5 <- train(classe ~ ., method = "gbm", data = predPCA, trControl = fitControl, verbose = F)
+modelFitSummaryGBM5$results
+modelFitSummaryLDA5 <- train(classe ~ ., method = "lda", data = predPCA, trControl = fitControl)
+modelFitSummaryLDA5$results
+modelFitSummaryNB5 <- train(classe ~ ., method = "nb", data = predPCA, trControl = fitControl)
+modelFitSummaryNB5$results
+```
+
+##Models for Data with Summary
+```{r modelsWithSummary}
+preProc <- preProcess(trainDFNoSummary[, -c(1, 2)], method = "pca", pcaComp = 4)
+predPCA <- predict(preProc, trainDFNoSummary)
+
+modelFitNoSummaryRF4 <- train(classe ~ ., method = "rf", data = predPCA, trControl = fitControl)
+modelFitNoSummaryRF4$results
+modelFitNoSummaryGBM4 <- train(classe ~ ., method = "gbm", data = predPCA, trControl = fitControl, verbose = F)
+modelFitNoSummaryGBM4$results
+modelFitNoSummaryLDA4 <- train(classe ~ ., method = "lda", data = predPCA, trControl = fitControl)
+modelFitNoSummaryLDA4$results
+modelFitNoSummaryNB4 <- train(classe ~ ., method = "nb", data = predPCA, trControl = fitControl)
+modelFitNoSummaryNB4$results
+
+preProc <- preProcess(trainDFNoSummary[, -c(1, 2)], method = "pca", pcaComp = 5)
+predPCA <- predict(preProc, trainDFNoSummary)
+
+modelFitNoSummaryRF5 <- train(classe ~ ., method = "rf", data = predPCA, trControl = fitControl)
+modelFitNoSummaryRF5$results
+modelFitNoSummaryGBM5 <- train(classe ~ ., method = "gbm", data = predPCA, trControl = fitControl, verbose = F)
+modelFitNoSummaryGBM5$results
+modelFitNoSummaryLDA5 <- train(classe ~ ., method = "lda", data = predPCA, trControl = fitControl)
+modelFitNoSummaryLDA5$results
+modelFitNoSummaryNB5 <- train(classe ~ ., method = "nb", data = predPCA, trControl = fitControl)
+modelFitNoSummaryNB5$results
+```
+
+#FINAL MODEL AND CONCLUSION
+A random forest model with 4 principal components derived from the raw data with no summary (modelFitNoSummaryRF4) gives us highest accuracy (`r (modelFitNoSummaryRF4$results)$Accuracy[3]`) to predict the quality exercise.
+
+##Out of Sample Error
+Because we use cross validation, we estimate our out of sample error to be 1 - accuracy or `r formatC(1 - (modelFitNoSummaryRF4$results)$Accuracy[3], width = 3, flag = "0")`.
