@@ -47,7 +47,7 @@ trainDFSummary <- trainDFRaw[complete.cases(trainDFRaw), c(2, 8, 160, grep("kurt
 
 ##Data Set Preparation
 
-We clean up the data set with summary that has many NAs and/or "#DIV/0!". We also remove variables with near zero variances.
+We clean up the data set with summary that has many NAs and/or "#DIV/0!". We also remove variables with near zero variances, x, user_name, num_window, and timestamp variables.
 
 ```{r preparation}
 nzv <- nearZeroVar(trainDFSummary, saveMetrics = T)
@@ -61,18 +61,22 @@ trainDFSummary <- read.csv("trainDFSummary.csv")
 nzv <- nearZeroVar(trainDFSummary, saveMetrics = T)
 trainDFSummary <- trainDFSummary[, -grep(paste(rownames(nzv[nzv$nzv == T, ]), collapse = "|"), colnames(trainDFSummary), value = F)]
 
+trainDFSummary <- trainDFSummary[, -c(1:2)]
+
 nzv <- nearZeroVar(trainDFNoSummary, saveMetrics = T)
 trainDFNoSummary <- trainDFNoSummary[, -grep(paste(rownames(nzv[nzv$nzv == T, ]), collapse = "|"), colnames(trainDFNoSummary), value = F)]
+
+trainDFNoSummary <- trainDFNoSummary[, -c(1:6)]
 ```
 
 ##Cross Validation
 We use K-folds cross validation with K = 5 to pick the best model.
 
 ##Preprocess
-We preprocess the data set using Principal Components Analysis to minimize 
+We preprocess the data set using Principal Components Analysis to minimize the effect of highly correlated variables.
 
-##Models for Data with No Summary
-```{r modelsWithNoSummary}
+##Models for Data with Summary
+```{r modelsWithSummary}
 preProc <- preProcess(trainDFSummary[, -c(1, 2)], method = "pca", pcaComp = 4)
 predPCA <- predict(preProc, trainDFSummary)
 
@@ -98,8 +102,17 @@ modelFitSummaryNB5 <- train(classe ~ ., method = "nb", data = predPCA, trControl
 modelFitSummaryNB5$results
 ```
 
-##Models for Data with Summary
-```{r modelsWithSummary}
+##Models for Data with No Summary
+```{r modelsWithNoSummary}
+modelFitNoSummaryRF <- train(classe ~ ., method = "rf", data = trainDFNoSummary, trControl = fitControl)
+modelFitNoSummaryRF$results
+modelFitNoSummaryGBM <- train(classe ~ ., method = "gbm", data = trainDFNoSummary, trControl = fitControl, verbose = F)
+modelFitNoSummaryGBM$results
+modelFitNoSummaryLDA <- train(classe ~ ., method = "lda", data = trainDFNoSummary, trControl = fitControl)
+modelFitNoSummaryLDA$results
+modelFitNoSummaryNB <- train(classe ~ ., method = "nb", data = trainDFNoSummary, trControl = fitControl)
+modelFitNoSummaryNB$results
+
 preProc <- preProcess(trainDFNoSummary[, -c(1, 2)], method = "pca", pcaComp = 4)
 predPCA <- predict(preProc, trainDFNoSummary)
 
@@ -125,8 +138,38 @@ modelFitNoSummaryNB5 <- train(classe ~ ., method = "nb", data = predPCA, trContr
 modelFitNoSummaryNB5$results
 ```
 
+##Tabulated Model Fit Results
+```{r modelFitResults}
+summary <- c(rep("Yes", 8), rep("No", 12))
+pca <- c(rep("4", 4), rep("5", 4), rep("No", 4), rep("4", 4), rep("5", 4))
+model <- rep(c("RF", "GBM", "LDA", "NB"), 5)
+accuracy <-
+     c(max(modelFitSummaryRF4$results$Accuracy),
+       max(modelFitSummaryGBM4$results$Accuracy),
+       max(modelFitSummaryLDA4$results$Accuracy),
+       max(modelFitSummaryNB4$results$Accuracy),
+       max(modelFitSummaryRF5$results$Accuracy),
+       max(modelFitSummaryGBM5$results$Accuracy),
+       max(modelFitSummaryLDA5$results$Accuracy),
+       max(modelFitSummaryNB5$results$Accuracy),
+       max(modelFitNoSummaryRF$results$Accuracy),
+       max(modelFitNoSummaryGBM$results$Accuracy),
+       max(modelFitNoSummaryLDA$results$Accuracy),
+       max(modelFitNoSummaryNB$results$Accuracy),
+       max(modelFitNoSummaryRF4$results$Accuracy),
+       max(modelFitNoSummaryGBM4$results$Accuracy),
+       max(modelFitNoSummaryLDA4$results$Accuracy),
+       max(modelFitNoSummaryNB4$results$Accuracy),
+       max(modelFitNoSummaryRF5$results$Accuracy),
+       max(modelFitNoSummaryGBM5$results$Accuracy),
+       max(modelFitNoSummaryLDA5$results$Accuracy),
+       max(modelFitNoSummaryNB5$results$Accuracy))
+performance <- data.frame(summary, pca, model, accuracy)
+performance
+```
+
 #FINAL MODEL AND CONCLUSION
-A random forest model with 4 principal components derived from the raw data with no summary (modelFitNoSummaryRF4) gives us highest accuracy (`r (modelFitNoSummaryRF4$results)$Accuracy[3]`) to predict the quality exercise.
+A random forest model with no principal components derived from the raw data with no summary (modelFitNoSummaryRF) gives us highest accuracy (`r max(modelFitNoSummaryRF$results$Accuracy)`) to predict the quality exercise.
 
 ##Out of Sample Error
-Because we use cross validation, we estimate our out of sample error to be 1 - accuracy or `r formatC(1 - (modelFitNoSummaryRF4$results)$Accuracy[3], width = 3, flag = "0")`.
+Because we use cross validation, we estimate our out of sample error to be 1 - accuracy or `r formatC(1 - max(modelFitNoSummaryRF$results$Accuracy), width = 3, flag = "0")`.
